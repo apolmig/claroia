@@ -1,0 +1,19 @@
+{
+    "compilerOptions": {
+        "module": "CommonJS",
+        "noImplicitAny": true,
+        "sourceMap": true,
+        "outDir": "../dist-electron",
+        "baseUrl": ".",
+        "paths": {
+            "*": [
+                "*"
+            ]
+        },
+        "esModuleInterop": true
+    },
+    "include": [
+        "main.ts",
+        "preload.ts"
+    ]
+}

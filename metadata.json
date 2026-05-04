@@ -1,0 +1,5 @@
+{
+  "name": "ClaroIA",
+  "description": "A local-first LLM summarization and evaluation workbench. Compare models, process batches, judge outputs, and export datasets from a Windows portable app or Netlify BYOK demo.",
+  "requestFramePermissions": []
+}
