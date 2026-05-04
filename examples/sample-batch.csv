@@ -1,3 +1,0 @@
-title,text,reference
-Example 1,"ClaroIA helps compare summaries from multiple OpenAI-compatible models. It supports local and cloud endpoints, batch files, and rubric-based evaluation.","ClaroIA compares summaries across OpenAI-compatible models with batch processing and rubric evaluation."
-Example 2,"The public demo uses bring-your-own-key mode. The backend validates allowed HTTPS endpoints and forwards requests without storing API keys.","The demo is BYOK: it validates allowed HTTPS endpoints and does not store user API keys."

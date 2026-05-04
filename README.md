@@ -128,10 +128,6 @@ The public Netlify demo allows only HTTPS endpoints from `NETLIFY_ALLOWED_ENDPOI
 
 See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md).
 
-## Example data
-
-A non-sensitive batch file is available at `examples/sample-batch.csv`.
-
 ## License
 
 MIT. See [LICENSE](LICENSE).

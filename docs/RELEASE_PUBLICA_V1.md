@@ -44,7 +44,7 @@ Desktop:
 - Extract the ZIP in a clean folder.
 - Launch `ClaroIA.exe`.
 - Confirm the app opens without Node.js/npm.
-- Import `examples/sample-batch.csv`.
+- Import a small local CSV/TXT/PDF file created for the manual test.
 - Run a local endpoint test if LM Studio or an OpenAI-compatible local server is available.
 - Check that external Markdown links open in the system browser and do not navigate the app window.
 - Confirm Excel and DOCX show the disabled-format message.
