@@ -63,6 +63,9 @@ Privacy:
 - Confirm history is private/session-only by default.
 - Enable saved history and verify only non-secret config is persisted.
 - Use **Clear local data** and verify history and API key are removed.
+- Enable Privacy Filter `Mask` mode with the sidecar stopped and confirm generation, judge, and export workflows are blocked.
+- With the sidecar running, confirm source text and reference summaries are both masked before judge/export workflows.
+- Generate results without masking, then enable `Mask` mode and confirm exports are blocked until the batch is re-run.
 
 ## Environment
 
@@ -80,6 +83,7 @@ Do not configure provider API keys as public environment variables.
 - Windows artifact is unsigned in v1.
 - Public demo is BYOK and may be limited by user provider quota.
 - DOCX and Excel import are intentionally disabled until a safer parsing strategy is selected.
+- Privacy Filter requires a local loopback sidecar. `Mask` mode blocks instead of falling back to raw text if that sidecar is unavailable.
 - The UI bundle currently emits a Vite chunk-size warning; this is not a release blocker.
 
 ## Suggested publication copy

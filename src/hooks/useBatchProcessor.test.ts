@@ -197,4 +197,88 @@ describe('useBatchProcessor', () => {
         // but we verify flow completes without crashing
         expect(result.current.isGenerating).toBe(false);
     });
+
+    it('masks reference summaries independently from source text in mask mode', async () => {
+        let state: BatchItem[] = [{
+            id: '1',
+            sourceText: 'No private data here',
+            referenceSummary: 'Written by Alice Smith',
+            status: 'pending',
+            results: {},
+            evaluations: {}
+        }];
+        const setBatchItems = vi.fn((updater) => {
+            state = typeof updater === 'function' ? updater(state) : updater;
+        });
+
+        (privacyFilterService.applyPrivacyFilter as any)
+            .mockResolvedValueOnce({
+                text: 'No private data here',
+                result: {},
+                metadata: {
+                    masked: false,
+                    mode: 'mask',
+                    runtime: 'local-sidecar',
+                    countsByCategory: {
+                        private_person: 0,
+                        private_address: 0,
+                        private_email: 0,
+                        private_phone: 0,
+                        private_url: 0,
+                        private_date: 0,
+                        account_number: 0,
+                        secret: 0
+                    },
+                    originalLength: 20,
+                    filteredAt: 1
+                }
+            })
+            .mockResolvedValueOnce({
+                text: 'Written by [PRIVATE_PERSON]',
+                result: {},
+                metadata: {
+                    masked: true,
+                    mode: 'mask',
+                    runtime: 'local-sidecar',
+                    countsByCategory: {
+                        private_person: 1,
+                        private_address: 0,
+                        private_email: 0,
+                        private_phone: 0,
+                        private_url: 0,
+                        private_date: 0,
+                        account_number: 0,
+                        secret: 0
+                    },
+                    originalLength: 22,
+                    filteredAt: 2
+                }
+            });
+        (llmService.generateSummary as any).mockResolvedValue('Summary result');
+
+        const { result } = renderHook(() => useBatchProcessor({
+            config: {
+                ...mockConfig,
+                privacyFilter: {
+                    ...privacyFilterService.DEFAULT_PRIVACY_FILTER_CONFIG,
+                    enabled: true,
+                    mode: 'mask'
+                }
+            },
+            batchItems: state,
+            setBatchItems
+        }));
+
+        await act(async () => {
+            await result.current.processBatch();
+        });
+
+        expect(privacyFilterService.applyPrivacyFilter).toHaveBeenCalledTimes(2);
+        expect(state[0].maskedSourceText).toBe('No private data here');
+        expect(state[0].maskedReferenceSummary).toBe('Written by [PRIVATE_PERSON]');
+        expect(state[0].privacy?.masked).toBe(true);
+        expect(state[0].privacy?.countsByCategory.private_person).toBe(1);
+        expect(state[0].resultsPrivacy?.config1?.mode).toBe('mask');
+        expect(state[0].resultsPrivacy?.config1?.runtime).toBe('local-sidecar');
+    });
 });

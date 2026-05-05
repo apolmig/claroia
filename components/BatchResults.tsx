@@ -42,19 +42,39 @@ const BatchResults: React.FC<BatchResultsProps> = ({ items, activeModels, config
 
     const currentMaskMode = config.privacyFilter?.enabled && config.privacyFilter.mode === 'mask';
     const requiresMaskedExport = currentMaskMode || items.some(item => item.privacy?.mode === 'mask');
-    const itemRequiresMaskedText = (item: BatchItem) => item.privacy?.mode === 'mask';
+    const itemRequiresMaskedText = (item: BatchItem) => currentMaskMode || item.privacy?.mode === 'mask';
+    const hasReferenceSummary = (item: BatchItem) => Boolean(item.referenceSummary?.trim());
     const hasUnsafePrivacyState = (item: BatchItem) => {
-        if (currentMaskMode && (!item.privacy || item.privacy.mode !== 'mask')) return true;
-        if (item.privacy?.mode === 'mask' && item.privacy.runtime !== 'local-sidecar') return true;
-        if (item.privacy?.masked && !item.maskedSourceText) return true;
+        if (!itemRequiresMaskedText(item)) return false;
+        if (!item.privacy || item.privacy.mode !== 'mask') return true;
+        if (item.privacy.runtime !== 'local-sidecar') return true;
+        if (item.maskedSourceText === undefined) return true;
+        if (hasReferenceSummary(item) && item.maskedReferenceSummary === undefined) return true;
         return false;
     };
+    const hasSafeOutputPrivacy = (item: BatchItem, configId: string) => {
+        if (!itemRequiresMaskedText(item)) return true;
+        const resultPrivacy = item.resultsPrivacy?.[configId];
+        return Boolean(
+            resultPrivacy?.mode === 'mask' &&
+            resultPrivacy.runtime === 'local-sidecar' &&
+            item.maskedSourceText !== undefined &&
+            (!hasReferenceSummary(item) || item.maskedReferenceSummary !== undefined)
+        );
+    };
+    const hasUnsafeOutputPrivacyState = (item: BatchItem) => {
+        if (!itemRequiresMaskedText(item)) return false;
+        return Object.entries(item.results).some(([configId, output]) =>
+            isSuccessfulOutput(output) && !hasSafeOutputPrivacy(item, configId)
+        );
+    };
     const getSafeSourceText = (item: BatchItem) => {
-        if (itemRequiresMaskedText(item) && item.privacy?.masked) return item.maskedSourceText || '';
+        if (itemRequiresMaskedText(item)) return item.maskedSourceText || '';
         return item.sourceText;
     };
     const getSafeReferenceSummary = (item: BatchItem) => {
-        if (itemRequiresMaskedText(item) && item.privacy?.masked) return item.maskedReferenceSummary || item.referenceSummary;
+        if (!hasReferenceSummary(item)) return undefined;
+        if (itemRequiresMaskedText(item)) return item.maskedReferenceSummary || '';
         return item.referenceSummary;
     };
     const isSuccessfulOutput = (output?: string | null) => Boolean(output && output.trim() && !output.trim().startsWith('Error:'));
@@ -64,20 +84,26 @@ const BatchResults: React.FC<BatchResultsProps> = ({ items, activeModels, config
         runtime: item.privacy.runtime,
         countsByCategory: item.privacy.countsByCategory,
         originalLength: item.privacy.originalLength,
-        filteredAt: item.privacy.filteredAt
+        filteredAt: item.privacy.filteredAt,
+        sourceTextReady: item.privacy.mode === 'mask' ? item.maskedSourceText !== undefined : true,
+        referenceSummaryReady: item.privacy.mode === 'mask' && item.referenceSummary
+            ? item.maskedReferenceSummary !== undefined
+            : true
     } : {
         masked: false,
         mode: 'off',
         runtime: 'unavailable',
         countsByCategory: {},
         originalLength: item.sourceText.length,
-        filteredAt: null
+        filteredAt: null,
+        sourceTextReady: true,
+        referenceSummaryReady: true
     };
     const ensurePrivacyReadyForExport = () => {
         if (!requiresMaskedExport) return true;
-        const unsafe = items.some(hasUnsafePrivacyState);
+        const unsafe = items.some(item => hasUnsafePrivacyState(item) || hasUnsafeOutputPrivacyState(item));
         if (unsafe) {
-            alert('Privacy Filter export is blocked because some items are not safely masked. Run Privacy Filter scan or re-run the batch with mask mode enabled before exporting.');
+            alert('Privacy Filter export is blocked because some source, reference, or generated output is not tied to a safe masked run. Run Privacy Filter scan and re-run the batch with mask mode enabled before exporting.');
             return false;
         }
         return true;
@@ -234,8 +260,8 @@ const BatchResults: React.FC<BatchResultsProps> = ({ items, activeModels, config
         setJudgingItemId(itemId + '-' + configId);
 
         try {
-            if (requiresMaskedExport && hasUnsafePrivacyState(item)) {
-                alert('Run Privacy Filter scan or process the batch with mask mode enabled before judging this result.');
+            if (itemRequiresMaskedText(item) && (hasUnsafePrivacyState(item) || !hasSafeOutputPrivacy(item, configId))) {
+                alert('Run Privacy Filter scan and re-run this batch item with mask mode enabled before judging this result.');
                 return false;
             }
 
@@ -268,7 +294,7 @@ const BatchResults: React.FC<BatchResultsProps> = ({ items, activeModels, config
             return true; // Success
         } catch (error: any) {
             const errorMsg = error.message || 'Unknown error';
-            onUpdateEvaluation(itemId, configId, 'note', `⚠️ Judge failed: ${errorMsg}`);
+            onUpdateEvaluation(itemId, configId, 'note', `Warning: Judge failed: ${errorMsg}`);
             if (!isBatchJudging) {
                 alert(`Failed to get LLM judgment: ${errorMsg}`);
             }
@@ -319,7 +345,7 @@ const BatchResults: React.FC<BatchResultsProps> = ({ items, activeModels, config
         setIsBatchJudging(false);
         setBatchJudgeProgress({ current: 0, total: 0 });
 
-        alert(`Batch judging complete!\n✓ Success: ${successCount}\n✗ Failed: ${failureCount}`);
+        alert(`Batch judging complete!\nSuccess: ${successCount}\nFailed: ${failureCount}`);
     };
 
     const exportJSONL = () => {
@@ -523,7 +549,7 @@ const BatchResults: React.FC<BatchResultsProps> = ({ items, activeModels, config
         try {
             if (!ensurePrivacyReadyForExport()) return;
             // Prepare CSV with comprehensive data
-            const headers = ['ID', 'Title', 'Source Text', 'Privacy Masked', 'Privacy Counts'];
+            const headers = ['ID', 'Title', 'Source Text', 'Reference Summary', 'Privacy Masked', 'Privacy Counts'];
 
             // Add column for each active configuration
             config.activeRunConfigs.forEach(configId => {
@@ -554,6 +580,7 @@ const BatchResults: React.FC<BatchResultsProps> = ({ items, activeModels, config
                     idx + 1,
                     escapeCSV(item.title || ''),
                     escapeCSV(getSafeSourceText(item)),
+                    escapeCSV(getSafeReferenceSummary(item) || ''),
                     escapeCSV(item.privacy?.masked ? 'Yes' : 'No'),
                     escapeCSV(item.privacy ? JSON.stringify(item.privacy.countsByCategory) : '')
                 ];
@@ -673,7 +700,7 @@ const BatchResults: React.FC<BatchResultsProps> = ({ items, activeModels, config
                             ) : (
                                 <span>{items.length} {t('results.testCases')}</span>
                             )}
-                            {' '}• {config.activeRunConfigs.length} {t('common.modelsActive')}
+                            {' '}| {config.activeRunConfigs.length} {t('common.modelsActive')}
                         </p>
                     </div>
 
@@ -775,10 +802,10 @@ const BatchResults: React.FC<BatchResultsProps> = ({ items, activeModels, config
                                             }`}
                                     >
                                         {mode === 'all' ? 'All Items' :
-                                            mode === 'pending' ? '⏳ Pending' :
-                                                mode === 'approved' ? '✅ Approved' :
-                                                    mode === 'rejected' ? '❌ Rejected' :
-                                                        '⚠️ Low Score (<7)'}
+                                            mode === 'pending' ? 'Pending' :
+                                                mode === 'approved' ? 'Approved' :
+                                                    mode === 'rejected' ? 'Rejected' :
+                                                        'Low Score (<7)'}
                                         {filterMode === mode && <Check size={12} />}
                                     </button>
                                 ))}
@@ -859,7 +886,7 @@ const BatchResults: React.FC<BatchResultsProps> = ({ items, activeModels, config
                                                 <span className="w-5 h-5 rounded bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px] font-bold">SFT</span>
                                                 <div>
                                                     <div className="font-medium">Supervised Fine-tuning</div>
-                                                    <div className="text-[10px] text-slate-500">Approved ≥7 only</div>
+                                                    <div className="text-[10px] text-slate-500">{'Approved >=7 only'}</div>
                                                 </div>
                                             </button>
                                             <button
@@ -940,7 +967,7 @@ const BatchResults: React.FC<BatchResultsProps> = ({ items, activeModels, config
                                                     stat.avgScore >= 6 ? 'text-amber-400' :
                                                         stat.avgScore > 0 ? 'text-red-400' : 'text-slate-500'
                                                     }`}>
-                                                    {stat.avgScore > 0 ? stat.avgScore.toFixed(1) : '—'}
+                                                    {stat.avgScore > 0 ? stat.avgScore.toFixed(1) : '-'}
                                                 </div>
                                                 <div className="text-[9px] text-slate-500 uppercase">Avg Score</div>
                                             </div>
@@ -1055,7 +1082,7 @@ const BatchResults: React.FC<BatchResultsProps> = ({ items, activeModels, config
                                                     <div className="font-bold text-slate-200 text-xs mb-1">{item.title}</div>
                                                 )}
                                                 <div className="line-clamp-3 font-mono text-xs text-slate-400">
-                                                    {item.sourceText}
+                                                    {getSafeSourceText(item) || (itemRequiresMaskedText(item) ? '[Privacy scan required]' : item.sourceText)}
                                                 </div>
                                                 <div className={`mt-2 text-[10px] uppercase font-bold ${item.status === 'done' ? 'text-emerald-500' : 'text-amber-500'}`}>
                                                     {item.status}
@@ -1072,7 +1099,7 @@ const BatchResults: React.FC<BatchResultsProps> = ({ items, activeModels, config
                                             {visibleColumns.includes('reference') && (
                                                 <td className="px-4 py-4 text-sm text-slate-300 align-top border-l border-slate-800 bg-slate-900/30">
                                                     <div className="text-xs font-mono text-slate-400 whitespace-pre-wrap max-h-[150px] overflow-y-auto custom-scrollbar">
-                                                        {item.referenceSummary || <span className="text-slate-600 italic">No reference provided</span>}
+                                                        {getSafeReferenceSummary(item) || (hasReferenceSummary(item) && itemRequiresMaskedText(item) ? '[Privacy scan required]' : <span className="text-slate-600 italic">No reference provided</span>)}
                                                     </div>
                                                 </td>
                                             )}
@@ -1137,13 +1164,15 @@ const BatchResults: React.FC<BatchResultsProps> = ({ items, activeModels, config
                                         {
                                             expandedRow === item.id && (
                                                 <tr className="bg-slate-900/20">
-                                                    <td colSpan={2 + sortedConfigs.filter(c => visibleColumns.includes(c.id)).length} className="px-4 py-4">
+                                                    <td colSpan={2 + (visibleColumns.includes('reference') ? 1 : 0) + sortedConfigs.filter(c => visibleColumns.includes(c.id)).length} className="px-4 py-4">
                                                         <div className="bg-slate-950 border border-slate-800 rounded-lg p-4">
                                                             <div className="mb-4">
-                                                                <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">Full Source Text</h4>
+                                                                <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">
+                                                                    {itemRequiresMaskedText(item) ? 'Source Text Used for LLM' : 'Full Source Text'}
+                                                                </h4>
                                                                 {item.title && <h5 className="text-sm font-bold text-slate-300 mb-1">{item.title}</h5>}
                                                                 <div className="bg-slate-900 p-3 rounded text-sm text-slate-300 font-mono whitespace-pre-wrap border border-slate-800">
-                                                                    {item.sourceText}
+                                                                    {getSafeSourceText(item) || (itemRequiresMaskedText(item) ? '[Privacy scan required]' : item.sourceText)}
                                                                 </div>
                                                             </div>
 
@@ -1170,6 +1199,14 @@ const BatchResults: React.FC<BatchResultsProps> = ({ items, activeModels, config
                                                                             <div className="text-[10px] font-bold uppercase text-cyan-300 mb-1">Masked text sent to LLM</div>
                                                                             <div className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded border border-slate-800 bg-slate-950 p-2 font-mono text-xs text-slate-300">
                                                                                 {item.maskedSourceText}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                    {item.maskedReferenceSummary && (
+                                                                        <div className="mt-3">
+                                                                            <div className="text-[10px] font-bold uppercase text-cyan-300 mb-1">Masked reference summary</div>
+                                                                            <div className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded border border-slate-800 bg-slate-950 p-2 font-mono text-xs text-slate-300">
+                                                                                {item.maskedReferenceSummary}
                                                                             </div>
                                                                         </div>
                                                                     )}
@@ -1241,7 +1278,7 @@ const BatchResults: React.FC<BatchResultsProps> = ({ items, activeModels, config
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={2 + config.activeRunConfigs.length} className="px-4 py-12 text-center text-slate-500">
+                                    <td colSpan={2 + (visibleColumns.includes('reference') ? 1 : 0) + sortedConfigs.filter(c => visibleColumns.includes(c.id)).length} className="px-4 py-12 text-center text-slate-500">
                                         <div className="flex flex-col items-center gap-2">
                                             <Search size={24} className="opacity-20" />
                                             <p className="text-sm">No items found matching "{searchTerm}"</p>

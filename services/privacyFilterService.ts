@@ -312,6 +312,31 @@ export const metadataFromPrivacyResult = (
     filteredAt: result.filteredAt || Date.now()
 });
 
+export const combinePrivacyMetadata = (
+    primary: PrivacyMetadata,
+    secondary?: PrivacyMetadata
+): PrivacyMetadata => {
+    if (!secondary) return primary;
+
+    const countsByCategory = emptyCounts();
+    PRIVACY_CATEGORIES.forEach(category => {
+        countsByCategory[category] =
+            (primary.countsByCategory?.[category] || 0) +
+            (secondary.countsByCategory?.[category] || 0);
+    });
+
+    return {
+        masked: primary.masked || secondary.masked,
+        mode: primary.mode !== "off" ? primary.mode : secondary.mode,
+        runtime: primary.runtime === "local-sidecar" && secondary.runtime === "local-sidecar"
+            ? "local-sidecar"
+            : "unavailable",
+        countsByCategory,
+        originalLength: primary.originalLength + secondary.originalLength,
+        filteredAt: Math.max(primary.filteredAt, secondary.filteredAt)
+    };
+};
+
 export const applyPrivacyFilter = async (
     text: string,
     config: AppConfig,
@@ -346,7 +371,7 @@ export const applyPrivacyFilter = async (
     } catch (error) {
         if (isAbortError(error)) throw error;
 
-        if (privacyConfig.blockOnUnavailable && (provider === "cloud" || privacyConfig.mode === "mask")) {
+        if (privacyConfig.mode === "mask" || (privacyConfig.blockOnUnavailable && provider === "cloud")) {
             throw new Error(`Privacy Filter blocked request: ${error instanceof Error ? error.message : "unavailable"}`);
         }
 

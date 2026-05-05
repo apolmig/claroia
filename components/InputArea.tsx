@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Upload, FileText, X, ClipboardPaste, Database, Play, Layers, Check, Settings } from 'lucide-react';
 import { AppConfig, BatchItem, ViewMode } from '../types';
-import { filterText, metadataFromPrivacyResult } from '../services/privacyFilterService';
+import { combinePrivacyMetadata, filterText, metadataFromPrivacyResult } from '../services/privacyFilterService';
 import * as pdfjsLib from 'pdfjs-dist';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
@@ -400,7 +400,7 @@ const InputArea: React.FC<InputAreaProps> = ({
 
     const resetBatchStatus = () => {
         if (confirm("Reset all batch items to 'pending' status? This will allow you to re-run the batch process.")) {
-            setBatchItems(prev => prev.map(item => ({ ...item, status: 'pending', results: {}, evaluations: {} })));
+            setBatchItems(prev => prev.map(item => ({ ...item, status: 'pending', results: {}, resultsPrivacy: {}, evaluations: {} })));
         }
     }
 
@@ -415,11 +415,13 @@ const InputArea: React.FC<InputAreaProps> = ({
         try {
             const scanned = await Promise.all(batchItems.map(async (item) => {
                 const result = await filterText(item.sourceText, config.privacyFilter);
-                const metadata = metadataFromPrivacyResult(result, config.privacyFilter.mode);
+                let metadata = metadataFromPrivacyResult(result, config.privacyFilter.mode);
                 let maskedReferenceSummary = item.maskedReferenceSummary;
 
                 if (item.referenceSummary && config.privacyFilter.mode === 'mask') {
                     const referenceResult = await filterText(item.referenceSummary, config.privacyFilter);
+                    const referenceMetadata = metadataFromPrivacyResult(referenceResult, config.privacyFilter.mode);
+                    metadata = combinePrivacyMetadata(metadata, referenceMetadata);
                     maskedReferenceSummary = referenceResult.maskedText;
                 }
 
@@ -589,7 +591,7 @@ const InputArea: React.FC<InputAreaProps> = ({
                     </button>
                     {!hasPendingItems && batchItems.length > 0 && (
                         <p className="text-xs text-slate-500 text-center mt-2">
-                            💡 Tip: Click "Reset & Re-run" to process items again with different configurations
+                            Tip: Click "Reset & Re-run" to process items again with different configurations
                         </p>
                     )}
                 </div>

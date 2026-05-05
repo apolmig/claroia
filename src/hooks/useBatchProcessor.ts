@@ -1,13 +1,32 @@
 import { useState, useRef, useCallback } from 'react';
 import { AppConfig, BatchItem } from '../../types';
 import { generateSummary, evaluateSummary, resolveJudgeRuntime } from '../../services/llmService';
-import { applyPrivacyFilter } from '../../services/privacyFilterService';
+import { applyPrivacyFilter, combinePrivacyMetadata } from '../../services/privacyFilterService';
 
 interface UseBatchProcessorProps {
     config: AppConfig;
     batchItems: BatchItem[];
     setBatchItems: React.Dispatch<React.SetStateAction<BatchItem[]>>;
 }
+
+const RUN_CONFIG_CONCURRENCY = 2;
+
+const runWithConcurrency = async <T,>(
+    items: T[],
+    limit: number,
+    signal: AbortSignal,
+    worker: (item: T) => Promise<void>
+) => {
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+        while (cursor < items.length && !signal.aborted) {
+            const item = items[cursor];
+            cursor += 1;
+            await worker(item);
+        }
+    });
+    await Promise.all(workers);
+};
 
 export const useBatchProcessor = ({ config, batchItems, setBatchItems }: UseBatchProcessorProps) => {
     const [isGenerating, setIsGenerating] = useState(false);
@@ -36,8 +55,20 @@ export const useBatchProcessor = ({ config, batchItems, setBatchItems }: UseBatc
         abortControllerRef.current = new AbortController();
         const signal = abortControllerRef.current.signal;
 
-        // Process items that are not 'done'
-        const pendingItems = batchItems.filter(i => i.status !== 'done');
+        const pendingItems = batchItems.filter(i => i.status === 'pending');
+        const activeRunConfigs = config.activeRunConfigs
+            .map(configId => config.runConfigurations.find(c => c.id === configId))
+            .filter(Boolean) as AppConfig['runConfigurations'];
+        if (activeRunConfigs.length === 0) {
+            setBatchItems(prev => prev.map(item =>
+                item.status === 'pending'
+                    ? { ...item, status: 'error', error: 'Active run configurations are missing' }
+                    : item
+            ));
+            setIsGenerating(false);
+            abortControllerRef.current = null;
+            return;
+        }
 
         try {
             for (const item of pendingItems) {
@@ -46,104 +77,113 @@ export const useBatchProcessor = ({ config, batchItems, setBatchItems }: UseBatc
                 // Update status to processing
                 setBatchItems(prev => prev.map(pi => pi.id === item.id ? { ...pi, status: 'processing' } : pi));
 
-                const itemResults: Record<string, string> = {};
-                const itemEvaluations: Record<string, any> = {};
-                let itemPrivacy: BatchItem['privacy'] = item.privacy;
-                let maskedSourceText = item.maskedSourceText;
-                let maskedReferenceSummary = item.maskedReferenceSummary;
-
-                // Run all active configurations for this item
-                // Note: internal concurrency for configs is fine, but we might want to check signal inside this loop too
-                await Promise.all(config.activeRunConfigs.map(async (configId) => {
-                    if (signal.aborted) return;
-
-                    const runConfig = config.runConfigurations.find(c => c.id === configId);
-                    if (!runConfig) return;
-
-                    const tempConfig: AppConfig = {
-                        ...config,
-                        provider: runConfig.provider,
-                        activeModels: [runConfig.model],
-                        systemInstruction: runConfig.systemInstruction,
-                        temperature: runConfig.temperature,
-                        topK: runConfig.topK,
-                        topP: runConfig.topP,
-                        maxOutputTokens: runConfig.maxOutputTokens,
-                        tone: runConfig.tone,
-                        format: runConfig.format,
-                        customFocus: runConfig.customFocus,
-                        maxWords: runConfig.maxWords
-                    };
-
-                    try {
+                try {
+                    const itemResults: Record<string, string> = {};
+                    const itemEvaluations: Record<string, any> = {};
+                    const hasCloudRun = activeRunConfigs.some(runConfig => {
                         const judgeRuntime = resolveJudgeRuntime(config, runConfig);
-                        const shouldJudge = Boolean(judgeRuntime.model);
-                        const privacyProvider = runConfig.provider === 'cloud' || (shouldJudge && judgeRuntime.provider === 'cloud') ? 'cloud' : runConfig.provider;
-                        const privacyApplied = await applyPrivacyFilter(item.sourceText, tempConfig, privacyProvider, { signal });
-                        const llmSourceText = privacyApplied.text;
-                        itemPrivacy = privacyApplied.metadata.mode === 'off' ? itemPrivacy : privacyApplied.metadata;
-                        maskedSourceText = privacyApplied.metadata.masked ? llmSourceText : maskedSourceText;
+                        return runConfig.provider === 'cloud' || Boolean(judgeRuntime.model && judgeRuntime.provider === 'cloud');
+                    });
+                    const privacyProvider = hasCloudRun ? 'cloud' : config.provider;
+                    const privacyApplied = await applyPrivacyFilter(item.sourceText, config, privacyProvider, { signal });
+                    const llmSourceText = privacyApplied.text;
+                    let itemPrivacy: BatchItem['privacy'] = privacyApplied.metadata.mode === 'off' ? item.privacy : privacyApplied.metadata;
+                    let maskedSourceText = privacyApplied.metadata.mode === 'mask' ? llmSourceText : item.maskedSourceText;
+                    let referenceForJudge = item.referenceSummary;
+                    let maskedReferenceSummary = item.maskedReferenceSummary;
 
-                        let referenceForJudge = item.referenceSummary;
-                        if (item.referenceSummary && privacyApplied.metadata.mode === 'mask') {
-                            const referencePrivacy = await applyPrivacyFilter(item.referenceSummary, tempConfig, privacyProvider, { signal });
-                            referenceForJudge = referencePrivacy.text;
-                            maskedReferenceSummary = referencePrivacy.metadata.masked ? referencePrivacy.text : maskedReferenceSummary;
-                        }
+                    if (item.referenceSummary && privacyApplied.metadata.mode === 'mask') {
+                        const referencePrivacy = await applyPrivacyFilter(item.referenceSummary, config, privacyProvider, { signal });
+                        referenceForJudge = referencePrivacy.text;
+                        maskedReferenceSummary = referencePrivacy.text;
+                        itemPrivacy = combinePrivacyMetadata(privacyApplied.metadata, referencePrivacy.metadata);
+                    }
+                    const generationPrivacy = itemPrivacy || privacyApplied.metadata;
 
-                        const result = await generateSummary(llmSourceText, tempConfig, runConfig.model, { signal });
+                    await runWithConcurrency(activeRunConfigs, RUN_CONFIG_CONCURRENCY, signal, async (runConfig) => {
                         if (signal.aborted) return;
 
-                        itemResults[configId] = result;
+                        const tempConfig: AppConfig = {
+                            ...config,
+                            provider: runConfig.provider,
+                            activeModels: [runConfig.model],
+                            systemInstruction: runConfig.systemInstruction,
+                            temperature: runConfig.temperature,
+                            topK: runConfig.topK,
+                            topP: runConfig.topP,
+                            maxOutputTokens: runConfig.maxOutputTokens,
+                            tone: runConfig.tone,
+                            format: runConfig.format,
+                            customFocus: runConfig.customFocus,
+                            maxWords: runConfig.maxWords
+                        };
 
-                        // --- LLM Judge Evaluation ---
                         try {
-                            if (shouldJudge) {
-                                if (signal.aborted) return;
+                            const judgeRuntime = resolveJudgeRuntime(config, runConfig);
+                            const shouldJudge = Boolean(judgeRuntime.model);
+                            const result = await generateSummary(llmSourceText, tempConfig, runConfig.model, { signal });
+                            if (signal.aborted) return;
 
-                                const evaluation = await evaluateSummary(
-                                    llmSourceText,
-                                    result,
-                                    config.judgeCriteria,
-                                    judgeRuntime.provider,
-                                    judgeRuntime.model,
-                                    judgeRuntime.endpoint,
-                                    judgeRuntime.apiKey,
-                                    referenceForJudge,
-                                    { signal }
-                                );
+                            itemResults[runConfig.id] = result;
 
-                                itemEvaluations[configId] = {
-                                    score: evaluation.score,
-                                    note: privacyApplied.metadata.masked ? `Privacy-filtered input. ${evaluation.note}` : evaluation.note,
-                                    isGroundTruth: false,
-                                    criteriaScores: evaluation.criteriaScores,
-                                    comparedToReference: evaluation.comparedToReference
-                                };
+                            try {
+                                if (shouldJudge) {
+                                    if (signal.aborted) return;
+
+                                    const evaluation = await evaluateSummary(
+                                        llmSourceText,
+                                        result,
+                                        config.judgeCriteria,
+                                        judgeRuntime.provider,
+                                        judgeRuntime.model,
+                                        judgeRuntime.endpoint,
+                                        judgeRuntime.apiKey,
+                                        referenceForJudge,
+                                        { signal }
+                                    );
+
+                                    itemEvaluations[runConfig.id] = {
+                                        score: evaluation.score,
+                                        note: itemPrivacy?.masked ? `Privacy-filtered input. ${evaluation.note}` : evaluation.note,
+                                        isGroundTruth: false,
+                                        criteriaScores: evaluation.criteriaScores,
+                                        comparedToReference: evaluation.comparedToReference
+                                    };
+                                }
+                            } catch (evalErr) {
+                                itemEvaluations[runConfig.id] = { score: 0, note: "Evaluation failed", isGroundTruth: false };
                             }
-                        } catch (evalErr) {
-                            itemEvaluations[configId] = { score: 0, note: "Evaluation failed", isGroundTruth: false };
+
+                        } catch (e: any) {
+                            if (signal.aborted || e?.name === 'AbortError') return;
+                            itemResults[runConfig.id] = `Error: ${e.message}`;
+                            itemEvaluations[runConfig.id] = { score: 0, note: "Generation failed", isGroundTruth: false };
                         }
+                    });
 
-                    } catch (e: any) {
-                        if (signal.aborted || e?.name === 'AbortError') return;
-                        itemResults[configId] = `Error: ${e.message}`;
-                        itemEvaluations[configId] = { score: 0, note: "Generation failed", isGroundTruth: false };
-                    }
-                }));
+                    if (signal.aborted) break;
 
-                if (signal.aborted) break;
-
-                // Update item with results and evaluations
-                setBatchItems(prev => prev.map(pi => pi.id === item.id ? {
-                    ...pi,
-                    status: 'done',
-                    results: itemResults,
-                    evaluations: itemEvaluations,
-                    privacy: itemPrivacy,
-                    maskedSourceText,
-                    maskedReferenceSummary
-                } : pi));
+                    setBatchItems(prev => prev.map(pi => pi.id === item.id ? {
+                        ...pi,
+                        status: 'done',
+                        results: itemResults,
+                        resultsPrivacy: Object.keys(itemResults).reduce((acc, configId) => {
+                            acc[configId] = generationPrivacy;
+                            return acc;
+                        }, {} as NonNullable<BatchItem['resultsPrivacy']>),
+                        evaluations: itemEvaluations,
+                        privacy: itemPrivacy,
+                        maskedSourceText,
+                        maskedReferenceSummary
+                    } : pi));
+                } catch (e: any) {
+                    if (signal.aborted || e?.name === 'AbortError') break;
+                    setBatchItems(prev => prev.map(pi => pi.id === item.id ? {
+                        ...pi,
+                        status: 'error',
+                        error: e?.message || 'Batch item failed'
+                    } : pi));
+                }
             }
         } finally {
             if (signal.aborted) {

@@ -21,7 +21,7 @@ Release materials:
 - Workbench: process `.txt`, `.csv`, `.pdf`, `.json`, and `.md` batches.
 - Compare runs: define multiple run configurations and view outputs side by side.
 - Judge outputs: score summaries with configurable weighted criteria and optional reference summaries.
-- Privacy Filter: optionally detect or mask PII locally before LLM calls.
+- Privacy Filter: optionally detect or fail-closed mask PII locally before LLM calls.
 - Export datasets: CSV, JSONL, SFT/RL/DPO-style exports for downstream workflows.
 
 ## Public v1 modes
@@ -122,7 +122,8 @@ The public Netlify demo allows only HTTPS endpoints from `NETLIFY_ALLOWED_ENDPOI
 - History is private/session-only by default.
 - If users enable saved history, source text and model outputs are stored in browser `localStorage`.
 - Use **Clear local data** in the UI before sharing a machine or working with sensitive data.
-- Privacy Filter can mask PII before LLM calls using an optional local loopback sidecar; the Netlify demo does not perform server-side redaction.
+- Privacy Filter can mask PII before LLM calls using an optional local loopback sidecar; in mask mode, ClaroIA blocks instead of falling back to raw text if masking fails.
+- Batch source text and reference summaries are masked independently, and exports are blocked unless generated outputs are tied to a safe masked run.
 - Excel `.xlsx/.xls` and DOCX import are disabled in the public build because previous client-side parsers had unresolved high-severity audit findings. Use CSV, TXT, Markdown, JSON, or PDF.
 - The Windows v1 artifact is unsigned unless a future release adds code signing.
 

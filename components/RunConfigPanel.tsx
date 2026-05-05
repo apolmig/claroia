@@ -130,7 +130,7 @@ const RunConfigPanel: React.FC<RunConfigPanelProps> = ({ config, setConfig, fetc
                                         {editingId === conf.id ? <ChevronUp size={14} className="text-slate-500" /> : <ChevronDown size={14} className="text-slate-500" />}
                                     </div>
                                     <div className="text-[10px] text-slate-500 truncate font-mono mt-0.5">
-                                        {conf.model} • {t(`types.tone.${conf.tone}`)} • T:{conf.temperature}
+                                        {conf.model} | {t(`types.tone.${conf.tone}`)} | T:{conf.temperature}
                                     </div>
                                 </div>
 

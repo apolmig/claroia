@@ -640,7 +640,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                     aria-controls="prompt-preview"
                   >
                     <span>{t('sidebar.promptPreview')}</span>
-                    <span className={`transition-transform ${isPreviewOpen ? 'rotate-180' : ''}`}>▼</span>
+                    <span className={`transition-transform ${isPreviewOpen ? 'rotate-180' : ''}`}>v</span>
                   </button>
 
                   {isPreviewOpen && (

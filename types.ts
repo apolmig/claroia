@@ -166,6 +166,7 @@ export interface BatchItem {
   maskedReferenceSummary?: string;
   status: 'pending' | 'processing' | 'done' | 'error';
   results: Record<string, string>; // model -> generated text
+  resultsPrivacy?: Record<string, PrivacyMetadata>; // run config -> privacy state used for generation
   evaluations: Record<string, Evaluation>; // model -> grading details
   humanValidated?: ValidationStatus; // For SFT curation workflow
   error?: string;

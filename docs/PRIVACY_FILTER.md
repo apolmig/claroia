@@ -10,6 +10,9 @@ The integration is designed for OpenAI Privacy Filter, an Apache 2.0 open-weight
 - The public Netlify demo does not redact server-side.
 - The expected sidecar endpoint must be a local HTTP loopback URL such as `http://127.0.0.1:8765`.
 - Cloud calls are blocked by default when the filter is enabled and the sidecar is unavailable. In `Mask before LLM` mode, all calls are blocked if the sidecar is unavailable.
+- `Mask` mode is fail-closed: ClaroIA never falls back to sending original text when masking fails, even if blocking is disabled for detect-only workflows.
+- Batch source text and reference summaries are treated as separate privacy surfaces. Both must be scanned and masked before judge/export workflows can use them in `Mask` mode.
+- Generated outputs are tied to the privacy state used at generation time. Exports and manual judge runs are blocked when an output was produced before a safe masked run.
 - Masking is irreversible in ClaroIA v1.1. The app does not store or export a re-identification map.
 
 ## Modes
@@ -92,8 +95,9 @@ ClaroIA performs masking client-side from spans, so the sidecar does not need to
 - Saved history stores the masked source text when masking is active.
 - Batch generation filters each item before generation.
 - LLM Judge evaluates the masked source, masked reference, and generated output.
-- CSV/JSONL/SFT/RL/DPO exports include privacy metadata and use masked source text after the batch has been processed or scanned.
-- If Privacy Filter is in `Mask` mode and batch items have not been scanned/processed, exports are blocked to avoid leaking unfiltered source text.
+- CSV/JSONL/SFT/RL/DPO exports include privacy metadata and use masked source and masked reference text after the batch has been processed or scanned.
+- If Privacy Filter is in `Mask` mode and batch items have not been scanned/processed, exports are blocked to avoid leaking unfiltered source or reference text.
+- If results were generated before enabling `Mask` mode, exports are blocked until the batch is re-run with masking enabled. This avoids exporting stale outputs that may contain copied PII.
 
 ## Limitations
 

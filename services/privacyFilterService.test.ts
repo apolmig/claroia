@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
     applyPrivacyFilter,
+    combinePrivacyMetadata,
     DEFAULT_PRIVACY_FILTER_CONFIG,
     maskFromSpans,
     metadataFromPrivacyResult
@@ -86,6 +87,20 @@ describe('privacyFilterService', () => {
         }, 'local')).rejects.toThrow('Privacy Filter blocked request');
     });
 
+    it('blocks mask mode even when blockOnUnavailable is disabled', async () => {
+        mockFetch.mockRejectedValueOnce(new Error('connection refused'));
+
+        await expect(applyPrivacyFilter('hello alice@example.com', {
+            ...baseConfig,
+            privacyFilter: {
+                ...DEFAULT_PRIVACY_FILTER_CONFIG,
+                enabled: true,
+                mode: 'mask',
+                blockOnUnavailable: false
+            }
+        }, 'local')).rejects.toThrow('Privacy Filter blocked request');
+    });
+
     it('does not mark metadata as masked when no spans were detected', () => {
         const metadata = metadataFromPrivacyResult({
             originalLength: 11,
@@ -106,6 +121,72 @@ describe('privacyFilterService', () => {
         }, 'mask');
 
         expect(metadata.masked).toBe(false);
+    });
+
+    it('combines source and reference privacy metadata', () => {
+        const counts = {
+            private_person: 0,
+            private_address: 0,
+            private_email: 0,
+            private_phone: 0,
+            private_url: 0,
+            private_date: 0,
+            account_number: 0,
+            secret: 0
+        };
+
+        const combined = combinePrivacyMetadata({
+            masked: false,
+            mode: 'mask',
+            runtime: 'local-sidecar',
+            countsByCategory: { ...counts, private_email: 1 },
+            originalLength: 10,
+            filteredAt: 10
+        }, {
+            masked: true,
+            mode: 'mask',
+            runtime: 'local-sidecar',
+            countsByCategory: { ...counts, private_person: 2 },
+            originalLength: 20,
+            filteredAt: 20
+        });
+
+        expect(combined.masked).toBe(true);
+        expect(combined.countsByCategory.private_email).toBe(1);
+        expect(combined.countsByCategory.private_person).toBe(2);
+        expect(combined.originalLength).toBe(30);
+        expect(combined.filteredAt).toBe(20);
+    });
+
+    it('marks combined metadata unavailable unless both scans used the sidecar', () => {
+        const counts = {
+            private_person: 0,
+            private_address: 0,
+            private_email: 0,
+            private_phone: 0,
+            private_url: 0,
+            private_date: 0,
+            account_number: 0,
+            secret: 0
+        };
+
+        const combined = combinePrivacyMetadata({
+            masked: true,
+            mode: 'mask',
+            runtime: 'local-sidecar',
+            countsByCategory: counts,
+            originalLength: 10,
+            filteredAt: 10
+        }, {
+            masked: false,
+            mode: 'mask',
+            runtime: 'unavailable',
+            countsByCategory: counts,
+            originalLength: 20,
+            filteredAt: 20
+        });
+
+        expect(combined.runtime).toBe('unavailable');
     });
 
     it('returns masked text from local sidecar spans', async () => {

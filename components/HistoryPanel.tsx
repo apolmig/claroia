@@ -121,7 +121,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ history, onRestore, onClear
                 {/* Footer Config Tags */}
                 <div className="flex flex-wrap gap-1.5 pt-1 opacity-60 hover:opacity-100 transition-opacity">
                     <span className="text-[9px] text-slate-500">
-                        {item.config.tone} • {item.config.format} • {item.config.maxWords}w
+                        {item.config.tone} | {item.config.format} | {item.config.maxWords}w
                     </span>
                 </div>
               </div>
