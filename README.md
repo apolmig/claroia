@@ -5,12 +5,12 @@ ClaroIA is a local-first LLM summarization and evaluation workbench. It runs as 
 ## Demo
 
 <p align="center">
-  <video src="https://github.com/apolmig/claroia/raw/main/docs/assets/claroia-social-demo-horizontal-30s.webm" controls width="100%">
-    Your browser does not support embedded videos.
-  </video>
+  <a href="https://youtu.be/H-uIokuW15o">
+    <img src="https://img.youtube.com/vi/H-uIokuW15o/maxresdefault.jpg" alt="ClaroIA demo video" width="100%">
+  </a>
 </p>
 
-[Open the demo video](docs/assets/claroia-social-demo-horizontal-30s.webm)
+[Watch the demo on YouTube](https://youtu.be/H-uIokuW15o)
 
 ## Public release
 
