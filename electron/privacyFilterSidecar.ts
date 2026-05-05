@@ -38,6 +38,15 @@ type PrivacySpan = {
     textPreview: string
 }
 
+class SidecarHttpError extends Error {
+    statusCode: number
+
+    constructor(statusCode: number, message: string) {
+        super(message)
+        this.statusCode = statusCode
+    }
+}
+
 const CATEGORIES: PrivacyCategory[] = [
     'private_person',
     'private_address',
@@ -52,6 +61,7 @@ const CATEGORIES: PrivacyCategory[] = [
 const DEFAULT_PORT = 8765
 const MODEL_ID = 'openai/privacy-filter'
 const MODEL_VERSION = 'openai/privacy-filter-q4'
+const MAX_REDACT_BODY_BYTES = 1_000_000
 
 let server: http.Server | null = null
 let classifierPromise: Promise<any> | null = null
@@ -145,8 +155,23 @@ const writeJson = (req: http.IncomingMessage | undefined, res: http.ServerRespon
 
 const readBody = async (req: http.IncomingMessage): Promise<string> =>
     new Promise((resolve, reject) => {
+        const contentLength = Number(req.headers['content-length'] || 0)
+        if (contentLength > MAX_REDACT_BODY_BYTES) {
+            reject(new SidecarHttpError(413, `Request body is too large. Limit is ${MAX_REDACT_BODY_BYTES} bytes.`))
+            return
+        }
+
         const chunks: Buffer[] = []
-        req.on('data', chunk => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
+        let received = 0
+        req.on('data', chunk => {
+            const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+            received += buffer.length
+            if (received > MAX_REDACT_BODY_BYTES) {
+                req.destroy(new SidecarHttpError(413, `Request body is too large. Limit is ${MAX_REDACT_BODY_BYTES} bytes.`))
+                return
+            }
+            chunks.push(buffer)
+        })
         req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
         req.on('error', reject)
     })
@@ -278,7 +303,8 @@ export const startPrivacyFilterSidecar = () => {
 
             writeJson(req, res, 404, { error: 'Not found' })
         } catch (error) {
-            writeJson(req, res, 500, {
+            const statusCode = error instanceof SidecarHttpError ? error.statusCode : 500
+            writeJson(req, res, statusCode, {
                 error: error instanceof Error ? error.message : 'Privacy Filter sidecar error'
             })
         }

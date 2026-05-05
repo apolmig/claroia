@@ -84,7 +84,7 @@ export const useBatchProcessor = ({ config, batchItems, setBatchItems }: UseBatc
                         const judgeRuntime = resolveJudgeRuntime(config, runConfig);
                         return runConfig.provider === 'cloud' || Boolean(judgeRuntime.model && judgeRuntime.provider === 'cloud');
                     });
-                    const privacyProvider = hasCloudRun ? 'cloud' : config.provider;
+                    const privacyProvider = hasCloudRun ? 'cloud' : 'local';
                     const privacyApplied = await applyPrivacyFilter(item.sourceText, config, privacyProvider, { signal });
                     const llmSourceText = privacyApplied.text;
                     let itemPrivacy: BatchItem['privacy'] = privacyApplied.metadata.mode === 'off' ? item.privacy : privacyApplied.metadata;

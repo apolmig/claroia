@@ -1,20 +1,14 @@
 const fs = require('node:fs')
 const https = require('node:https')
 const path = require('node:path')
+const crypto = require('node:crypto')
 
-const repo = 'openai/privacy-filter'
-const revision = process.env.CLAROIA_PRIVACY_MODEL_REVISION || 'main'
+const manifest = require('./privacy-filter-model-manifest.json')
+const repo = manifest.repo
+const revision = process.env.CLAROIA_PRIVACY_MODEL_REVISION || manifest.revision
 const outputRoot = path.resolve('privacy-filter-model', repo)
 
-const files = [
-  'README.md',
-  'config.json',
-  'tokenizer.json',
-  'tokenizer_config.json',
-  'viterbi_calibration.json',
-  'onnx/model_q4.onnx',
-  'onnx/model_q4.onnx_data'
-]
+const files = Object.keys(manifest.files)
 
 const resolveUrl = (file) =>
   `https://huggingface.co/${repo}/resolve/${revision}/${file}?download=true`
@@ -99,6 +93,33 @@ const download = (url, destination, redirects = 0, resumeFrom = null) =>
     }).on('error', reject)
   })
 
+const sha256File = (filePath) =>
+  new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256')
+    const stream = fs.createReadStream(filePath)
+    stream.on('data', chunk => hash.update(chunk))
+    stream.on('end', () => resolve(hash.digest('hex')))
+    stream.on('error', reject)
+  })
+
+const verifyFile = async (file) => {
+  const destination = path.join(outputRoot, file)
+  const expected = manifest.files[file]
+  if (!expected) {
+    throw new Error(`No manifest entry for ${file}`)
+  }
+
+  const stat = fs.statSync(destination)
+  if (stat.size !== expected.bytes) {
+    throw new Error(`Size mismatch for ${file}: expected ${expected.bytes}, got ${stat.size}`)
+  }
+
+  const actualHash = await sha256File(destination)
+  if (actualHash !== expected.sha256) {
+    throw new Error(`SHA-256 mismatch for ${file}: expected ${expected.sha256}, got ${actualHash}`)
+  }
+}
+
 const main = async () => {
   fs.mkdirSync(outputRoot, { recursive: true })
 
@@ -108,14 +129,17 @@ const main = async () => {
 
     if (fs.existsSync(destination) && fs.statSync(destination).size > 0) {
       console.log(`present ${file}`)
+      await verifyFile(file)
       continue
     }
 
     console.log(`download ${file}`)
     await download(resolveUrl(file), destination)
+    await verifyFile(file)
   }
 
   console.log(`Privacy Filter model bundle ready at ${path.resolve('privacy-filter-model')}`)
+  console.log(`Verified ${repo} at ${revision}`)
 }
 
 main().catch(error => {

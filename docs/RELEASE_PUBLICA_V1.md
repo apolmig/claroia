@@ -40,6 +40,8 @@ Expected state:
 - Windows ZIP: generated and does not include previous release artifacts recursively.
 - Standard Windows ZIP: does not include `resources/privacy-filter-model`.
 - Privacy-bundled Windows ZIP: includes `resources/privacy-filter-model/openai/privacy-filter/onnx/model_q4.onnx_data`.
+- Privacy-bundled model download is pinned and verified against `scripts/privacy-filter-model-manifest.json`.
+- Release upload workflow copies ZIP artifacts dynamically instead of hardcoding the package version.
 
 ## Manual smoke test
 
@@ -71,7 +73,9 @@ Privacy:
 - With the sidecar running, confirm source text and reference summaries are both masked before judge/export workflows.
 - In the privacy-bundled desktop artifact, extract the ZIP, launch `ClaroIA.exe`, and confirm `GET http://127.0.0.1:8765/health` returns `openai/privacy-filter-q4`.
 - In the privacy-bundled desktop artifact, post sample text with a name, email, and phone number to `/redact` and confirm `private_person`, `private_email`, and `private_phone` spans are returned.
+- Confirm an oversized `/redact` body is rejected by the embedded sidecar.
 - Generate results without masking, then enable `Mask` mode and confirm exports are blocked until the batch is re-run.
+- Mark a Workbench item approved/rejected and confirm the filter chips and SFT export eligibility reflect the status.
 
 ## Environment
 

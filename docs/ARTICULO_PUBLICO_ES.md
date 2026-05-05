@@ -47,6 +47,8 @@ Tambien se ha hecho asi para mantener una frontera de privacidad clara:
 - El Privacy Filter opcional puede enmascarar PII localmente antes de llamar a un LLM. En modo `mask`, si el sidecar local no esta disponible o falla, la operacion se bloquea en vez de enviar texto original.
 - En lotes, el texto fuente y el resumen de referencia se tratan como superficies independientes: ambos deben estar escaneados y enmascarados antes de juzgar o exportar en modo `mask`.
 - Las exportaciones se bloquean si los resultados fueron generados antes de activar el enmascarado, para evitar reutilizar outputs antiguos que puedan contener PII copiada del texto original.
+- El artefacto con Privacy Filter empaquetado fija una revision concreta del modelo y verifica hashes antes de publicar el ZIP.
+- El workbench permite marcar filas como pendientes, aprobadas o rechazadas antes de preparar datasets SFT.
 
 El resultado es una aplicacion que puede publicarse sin convertir el servidor en un proxy abierto ni pedir a los usuarios que confien ciegamente en almacenamiento remoto.
 

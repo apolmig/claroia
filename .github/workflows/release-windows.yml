@@ -33,13 +33,16 @@ jobs:
         run: |
           npm run release:win
           New-Item -ItemType Directory -Force -Path dist-electron/release-assets | Out-Null
-          Copy-Item -LiteralPath dist-electron/release/ClaroIA-1.1.0-win-x64.zip -Destination dist-electron/release-assets/
+          Get-ChildItem -Path dist-electron/release -Filter 'ClaroIA-*-win-x64.zip' |
+            Where-Object { $_.Name -notlike '*privacy-bundled*' } |
+            Copy-Item -Destination dist-electron/release-assets/
 
       - name: Build privacy-bundled Windows ZIP
         shell: pwsh
         run: |
           npm run release:win:privacy-bundled
-          Copy-Item -LiteralPath dist-electron/release/ClaroIA-1.1.0-privacy-bundled-win-x64.zip -Destination dist-electron/release-assets/
+          Get-ChildItem -Path dist-electron/release -Filter 'ClaroIA-*-privacy-bundled-win-x64.zip' |
+            Copy-Item -Destination dist-electron/release-assets/
 
       - name: Ensure release exists
         shell: pwsh

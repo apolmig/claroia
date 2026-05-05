@@ -240,6 +240,10 @@ const BatchResults: React.FC<BatchResultsProps> = ({ items, activeModels, config
         return Math.max(1, Math.min(10, num));
     };
 
+    const updateValidation = (itemId: string, status: ValidationStatus) => {
+        onUpdateItem?.(itemId, 'humanValidated', status);
+    };
+
     const toggleColumn = (id: string) => {
         setVisibleColumns(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
     };
@@ -1086,6 +1090,35 @@ const BatchResults: React.FC<BatchResultsProps> = ({ items, activeModels, config
                                                 </div>
                                                 <div className={`mt-2 text-[10px] uppercase font-bold ${item.status === 'done' ? 'text-emerald-500' : 'text-amber-500'}`}>
                                                     {item.status}
+                                                </div>
+                                                <div className="mt-2 flex flex-wrap gap-1">
+                                                    {(['pending', 'approved', 'rejected'] as ValidationStatus[]).map(status => {
+                                                        const active = (item.humanValidated || 'pending') === status;
+                                                        return (
+                                                            <button
+                                                                key={status}
+                                                                type="button"
+                                                                onClick={(event) => {
+                                                                    event.stopPropagation();
+                                                                    updateValidation(item.id, status);
+                                                                }}
+                                                                disabled={!onUpdateItem}
+                                                                className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase transition-colors ${active
+                                                                    ? status === 'approved'
+                                                                        ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
+                                                                        : status === 'rejected'
+                                                                            ? 'border-red-400/30 bg-red-400/10 text-red-300'
+                                                                            : 'border-slate-500/30 bg-slate-700/60 text-slate-300'
+                                                                    : 'border-slate-800 bg-slate-900 text-slate-600 hover:text-slate-300'
+                                                                    }`}
+                                                                title={`Mark item as ${status}`}
+                                                            >
+                                                                {status === 'approved' && <Check size={10} />}
+                                                                {status === 'rejected' && <X size={10} />}
+                                                                {status}
+                                                            </button>
+                                                        );
+                                                    })}
                                                 </div>
                                                 {item.privacy && item.privacy.mode !== 'off' && (
                                                     <div className={`mt-1 inline-flex rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase ${item.privacy.masked

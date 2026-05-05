@@ -109,7 +109,7 @@ The command downloads the `openai/privacy-filter` q4 ONNX bundle from Hugging Fa
 ClaroIA-1.1.0-privacy-bundled-win-x64.zip
 ```
 
-The bundled model files are intentionally ignored by Git because they are large release assets. Re-run `npm run privacy:download-model` to refresh the local bundle before rebuilding. The standard `npm run release:win` path omits `privacy-filter-model/` even when that folder exists locally.
+The bundled model files are intentionally ignored by Git because they are large release assets. `npm run privacy:download-model` is pinned to the Hugging Face commit recorded in `scripts/privacy-filter-model-manifest.json` and verifies file sizes plus SHA-256 hashes before the release can continue. To update model weights, update that manifest in the same commit as the release change. The standard `npm run release:win` path omits `privacy-filter-model/` even when that folder exists locally.
 
 ### Release smoke test
 
@@ -132,6 +132,8 @@ The verified artifact produced during this pass was `1,035,515,035` bytes and in
 - CSV/JSONL/SFT/RL/DPO exports include privacy metadata and use masked source and masked reference text after the batch has been processed or scanned.
 - If Privacy Filter is in `Mask` mode and batch items have not been scanned/processed, exports are blocked to avoid leaking unfiltered source or reference text.
 - If results were generated before enabling `Mask` mode, exports are blocked until the batch is re-run with masking enabled. This avoids exporting stale outputs that may contain copied PII.
+- The embedded sidecar rejects redact request bodies larger than 1 MB before buffering them, limiting local memory/CPU abuse.
+- Workbench rows can be marked `pending`, `approved`, or `rejected`; SFT export can use the approved status in addition to scores and ground-truth flags.
 
 ## Limitations
 

@@ -281,4 +281,35 @@ describe('useBatchProcessor', () => {
         expect(state[0].resultsPrivacy?.config1?.mode).toBe('mask');
         expect(state[0].resultsPrivacy?.config1?.runtime).toBe('local-sidecar');
     });
+
+    it('treats local-only batch runs as local for privacy fallback decisions', async () => {
+        const setBatchItems = vi.fn();
+        (llmService.generateSummary as any).mockResolvedValue('Summary result');
+
+        const { result } = renderHook(() => useBatchProcessor({
+            config: {
+                ...mockConfig,
+                provider: 'cloud',
+                privacyFilter: {
+                    ...privacyFilterService.DEFAULT_PRIVACY_FILTER_CONFIG,
+                    enabled: true,
+                    mode: 'detect',
+                    blockOnUnavailable: true
+                }
+            },
+            batchItems: [mockBatchItems[0]],
+            setBatchItems
+        }));
+
+        await act(async () => {
+            await result.current.processBatch();
+        });
+
+        expect(privacyFilterService.applyPrivacyFilter).toHaveBeenCalledWith(
+            'Text 1',
+            expect.objectContaining({ provider: 'cloud' }),
+            'local',
+            expect.any(Object)
+        );
+    });
 });
