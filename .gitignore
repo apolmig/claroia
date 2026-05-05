@@ -11,6 +11,8 @@ node_modules
 dist
 dist-electron
 dist-ssr
+privacy-filter-model/*
+!privacy-filter-model/.gitkeep
 *.local
 .env
 .env.*

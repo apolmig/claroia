@@ -63,7 +63,7 @@ export interface PrivacyAppliedText {
     metadata: PrivacyMetadata;
 }
 
-const PRIVACY_TIMEOUT_MS = 20_000;
+const PRIVACY_TIMEOUT_MS = 120_000;
 
 const isAbortError = (error: unknown): boolean =>
     error instanceof DOMException && error.name === "AbortError" ||

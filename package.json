@@ -23,15 +23,19 @@
     "build": "npm run build:web",
     "build:web": "vite build",
     "preview": "vite preview",
+    "privacy:download-model": "node scripts/download-privacy-filter-model.cjs",
     "electron:write-package": "node scripts/write-electron-package.cjs",
     "electron:dev": "concurrently -k \"npm run dev\" \"wait-on tcp:3000 && tsc -p electron/tsconfig.json && npm run electron:write-package && set VITE_DEV_SERVER_URL=http://localhost:3000&& electron .\"",
     "electron:build": "tsc -p electron/tsconfig.json && npm run electron:write-package && vite build && electron-builder",
     "clean:release": "node -e \"require('fs').rmSync('dist-electron/release',{recursive:true,force:true})\"",
     "build:desktop:win": "npm run clean:release && set CSC_IDENTITY_AUTO_DISCOVERY=false&& npm run electron:build -- --win zip",
+    "build:desktop:win:privacy-bundled": "npm run clean:release && npm run privacy:download-model && set CSC_IDENTITY_AUTO_DISCOVERY=false&& tsc -p electron/tsconfig.json && npm run electron:write-package && vite build && electron-builder --win zip --config electron-builder.privacy-bundled.cjs",
     "release:win": "npm run build:desktop:win",
+    "release:win:privacy-bundled": "npm run build:desktop:win:privacy-bundled",
     "test": "vitest -c vite.config.test.ts"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "i18next": "^25.8.0",
     "lucide-react": "^0.554.0",
     "pdfjs-dist": "^5.4.449",
@@ -69,6 +73,7 @@
     "files": [
       "dist/**/*",
       "dist-electron/main.js",
+      "dist-electron/privacyFilterSidecar.js",
       "dist-electron/preload.js",
       "dist-electron/package.json",
       "!dist-electron/release{,/**/*}"

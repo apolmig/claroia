@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.1-unreleased - Privacy-bundled artifact
+
+### Added
+
+- Alternative Windows privacy-bundled release path that packages OpenAI Privacy Filter q4 ONNX assets.
+- Electron-owned loopback Privacy Filter sidecar for bundled PII detection and masking at `http://127.0.0.1:8765`.
+- Separate electron-builder config for the privacy-bundled ZIP so the standard Windows artifact does not carry model weights.
+
 ## 1.1.0 - Privacy Filter integration
 
 ### Added

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, shell } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { startPrivacyFilterSidecar, stopPrivacyFilterSidecar } from './privacyFilterSidecar'
 
 // The built directory structure
 //
@@ -94,6 +95,7 @@ app.on('web-contents-created', (_event, contents) => {
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
+        stopPrivacyFilterSidecar()
         app.quit()
         win = null
     }
@@ -107,4 +109,7 @@ app.on('activate', () => {
     }
 })
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+    startPrivacyFilterSidecar()
+    createWindow()
+})

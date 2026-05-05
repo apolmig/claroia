@@ -15,7 +15,7 @@ History is private/session-only by default. If the user enables saved history, t
 
 ## Privacy Filter
 
-ClaroIA can optionally call a local loopback Privacy Filter sidecar before generation. Cloud calls are blocked by default when the filter is enabled but unavailable. In mask mode, ClaroIA is fail-closed: source text and reference summaries must be masked successfully before generation, judge, or export workflows can proceed. Results generated before a safe masked run are not exportable while mask mode is active. The app does not store a reversible re-identification map. This reduces exposure but is not legal anonymization or a compliance guarantee.
+ClaroIA can optionally call a local loopback Privacy Filter sidecar before generation. The privacy-bundled desktop artifact includes the q4 model weights and starts that sidecar automatically; the standard desktop ZIP expects an external local sidecar if filtering is enabled. Cloud calls are blocked by default when the filter is enabled but unavailable. In mask mode, ClaroIA is fail-closed: source text and reference summaries must be masked successfully before generation, judge, or export workflows can proceed. Results generated before a safe masked run are not exportable while mask mode is active. The app does not store a reversible re-identification map. This reduces exposure but is not legal anonymization or a compliance guarantee.
 
 ## Public demo
 

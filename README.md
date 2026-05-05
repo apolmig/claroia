@@ -36,6 +36,16 @@ npm run release:win
 
 Artifacts are written to `dist-electron/release/`.
 
+An alternative privacy-bundled artifact includes the OpenAI Privacy Filter q4 ONNX weights and starts the local masking sidecar automatically:
+
+```bash
+npm run release:win:privacy-bundled
+```
+
+That ZIP is larger because it carries the local PII detection model under the packaged app resources.
+
+The standard `release:win` artifact omits the model weights. The privacy-bundled build uses `electron-builder.privacy-bundled.cjs` so the two release paths stay separate.
+
 ### Netlify BYOK demo
 
 The Netlify demo is static Vite frontend plus minimal Functions:
@@ -122,7 +132,7 @@ The public Netlify demo allows only HTTPS endpoints from `NETLIFY_ALLOWED_ENDPOI
 - History is private/session-only by default.
 - If users enable saved history, source text and model outputs are stored in browser `localStorage`.
 - Use **Clear local data** in the UI before sharing a machine or working with sensitive data.
-- Privacy Filter can mask PII before LLM calls using an optional local loopback sidecar; in mask mode, ClaroIA blocks instead of falling back to raw text if masking fails.
+- Privacy Filter can mask PII before LLM calls using an optional local loopback sidecar; the alternative privacy-bundled desktop artifact includes the model weights and starts that sidecar automatically. In mask mode, ClaroIA blocks instead of falling back to raw text if masking fails.
 - Batch source text and reference summaries are masked independently, and exports are blocked unless generated outputs are tied to a safe masked run.
 - Excel `.xlsx/.xls` and DOCX import are disabled in the public build because previous client-side parsers had unresolved high-severity audit findings. Use CSV, TXT, Markdown, JSON, or PDF.
 - The Windows v1 artifact is unsigned unless a future release adds code signing.
